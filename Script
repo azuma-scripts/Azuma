@@ -1,0 +1,1184 @@
+local StarterGui = game:GetService("StarterGui")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Debris = game:GetService("Debris")
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local camera = workspace.CurrentCamera
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AzumaPremiumGUI"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local flyEnabled = false
+local noclipEnabled = false
+local espEnabled = false
+local godModeEnabled = false
+local infJumpEnabled = false
+local autoClickEnabled = false
+local antiAfkEnabled = false
+local fullbrightEnabled = false
+local aimbotEnabled = false
+local headlessEnabled = false
+local korbloxEnabled = false
+local hitboxExpanderEnabled = false
+local hitboxSize = 5
+local speedHackEnabled = false
+local speedValue = 50
+local jumpPowerEnabled = false
+local jumpPowerValue = 100
+local guiScale = 0.5
+local hairSpinEnabled = false
+local xrayEnabled = false
+local teleportToMouseEnabled = false
+local invisibleEnabled = false
+local superPunchEnabled = false
+local gravityToggleEnabled = false
+local gravityValue = 196.2
+local timeOfDayToggleEnabled = false
+local timeOfDayValue = 12
+local noFogEnabled = false
+local autoFarmEnabled = false
+local espColor = Color3.fromRGB(255, 0, 0)
+local uiFont = Enum.Font.SourceSans
+local colorScheme = "GreyWhite" -- Default
+local colorSchemes = {
+    GreyWhite = {start = Color3.fromRGB(200, 200, 200), endColor = Color3.fromRGB(255, 255, 255)},
+    Dark = {start = Color3.fromRGB(100, 100, 100), endColor = Color3.fromRGB(0, 0, 0)},
+    Blue = {start = Color3.fromRGB(100, 100, 255), endColor = Color3.fromRGB(0, 0, 100)},
+    Green = {start = Color3.fromRGB(100, 255, 100), endColor = Color3.fromRGB(0, 100, 0)},
+    Red = {start = Color3.fromRGB(255, 100, 100), endColor = Color3.fromRGB(100, 0, 0)}
+}
+local particleTexture = "rbxassetid://4483345998"
+local particleRate = 20
+local particleLifetime = NumberRange.new(2, 5)
+local flyConnections = {}
+local noclipConn = nil
+local infJumpConn = nil
+local autoClickConn = nil
+local antiAfkConn = nil
+local aimbotConn = nil
+local hairSpinConn = nil
+local highlights = {}
+local defaultLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows,
+    OutdoorAmbient = Lighting.OutdoorAmbient
+}
+local defaultGravity = workspace.Gravity
+local flySpeed = 50
+local targetPlayer = nil
+local originalHeads = {}
+local originalFaces = {}
+local originalRightLegs = {}
+local originalParts = {}
+
+local loadingScreen = Instance.new("Frame")
+loadingScreen.Size = UDim2.new(1, 0, 1, 0)
+loadingScreen.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+loadingScreen.Parent = screenGui
+local loadingText = Instance.new("TextLabel")
+loadingText.Size = UDim2.new(1, 0, 1, 0)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "Loading..."
+loadingText.TextColor3 = Color3.fromRGB(0, 0, 0)
+loadingText.TextSize = 50
+loadingText.Font = Enum.Font.SourceSansBold
+loadingText.Parent = loadingScreen
+TweenService:Create(loadingScreen, TweenInfo.new(2), {BackgroundTransparency = 1}):Play()
+TweenService:Create(loadingText, TweenInfo.new(2), {TextTransparency = 1}):Play()
+Debris:AddItem(loadingScreen, 2.1)
+
+local function applyColorScheme()
+    local scheme = colorSchemes[colorScheme]
+    mainGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, scheme.start), ColorSequenceKeypoint.new(1, scheme.endColor)}
+    tabGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, scheme.start), ColorSequenceKeypoint.new(1, scheme.endColor)}
+    for _, btn in pairs(screenGui:GetDescendants()) do
+        if btn:IsA("Frame") and btn.BackgroundColor3 == Color3.fromRGB(240, 240, 240) then
+            btn.BackgroundColor3 = scheme.endColor
+        end
+    end
+end
+
+local function toggleFullbright(enabled)
+    fullbrightEnabled = enabled
+    if enabled then
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 12
+        Lighting.FogEnd = 100000
+        Lighting.GlobalShadows = false
+        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    else
+        Lighting.Brightness = defaultLighting.Brightness
+        Lighting.ClockTime = defaultLighting.ClockTime
+        Lighting.FogEnd = defaultLighting.FogEnd
+        Lighting.GlobalShadows = defaultLighting.GlobalShadows
+        Lighting.OutdoorAmbient = defaultLighting.OutdoorAmbient
+    end
+end
+
+local function toggleNoclip(enabled)
+    noclipEnabled = enabled
+    if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+    if enabled then
+        noclipConn = RunService.Stepped:Connect(function()
+            if character then
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    end
+end
+
+local function toggleEsp(enabled)
+    espEnabled = enabled
+    if not enabled then
+        for _, hl in pairs(highlights) do
+            hl:Destroy()
+        end
+        highlights = {}
+        return
+    end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            local hl = Instance.new("Highlight")
+            hl.Parent = plr.Character
+            hl.FillColor = espColor
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.FillTransparency = 0.5
+            hl.OutlineTransparency = 0
+            highlights[plr] = hl
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function(char)
+        if espEnabled and plr ~= player then
+            local hl = Instance.new("Highlight")
+            hl.Parent = char
+            hl.FillColor = espColor
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.FillTransparency = 0.5
+            hl.OutlineTransparency = 0
+            highlights[plr] = hl
+        end
+    end)
+end)
+
+local function toggleHeadless(enabled)
+    headlessEnabled = enabled
+    local head = character:FindFirstChild("Head")
+    if head then
+        local face = head:FindFirstChildOfClass("Decal")
+        if enabled then
+            if not originalHeads[player] then
+                originalHeads[player] = head.Transparency
+            end
+            if face and not originalFaces[player] then
+                originalFaces[player] = face.Transparency
+            end
+            head.Transparency = 1
+            if face then
+                face.Transparency = 1
+            end
+            head.LocalTransparencyModifier = 1
+        else
+            if originalHeads[player] then
+                head.Transparency = originalHeads[player]
+            end
+            if face and originalFaces[player] then
+                face.Transparency = originalFaces[player]
+            end
+            head.LocalTransparencyModifier = 0
+        end
+    end
+end
+
+local function toggleKorblox(enabled)
+    korbloxEnabled = enabled
+    local rightUpperLeg = character:FindFirstChild("RightUpperLeg")
+    if rightUpperLeg then
+        if enabled then
+            if not originalRightLegs[player] then
+                originalRightLegs[player] = rightUpperLeg.Transparency
+            end
+            rightUpperLeg.Transparency = 1
+            rightUpperLeg.LocalTransparencyModifier = 1
+        else
+            if originalRightLegs[player] then
+                rightUpperLeg.Transparency = originalRightLegs[player]
+            end
+            rightUpperLeg.LocalTransparencyModifier = 0
+        end
+    end
+end
+
+local function toggleHitboxExpander(enabled)
+    hitboxExpanderEnabled = enabled
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
+            local head = plr.Character.Head
+            if enabled then
+                if not originalHeads[plr] then
+                    originalHeads[plr] = {
+                        size = head.Size,
+                        transparency = head.Transparency
+                    }
+                end
+                head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                head.Transparency = 0.7
+            else
+                if originalHeads[plr] then
+                    head.Size = originalHeads[plr].size
+                    head.Transparency = originalHeads[plr].transparency
+                end
+            end
+        end
+    end
+end
+
+local function updateHitboxSize(value)
+    hitboxSize = value
+    if hitboxExpanderEnabled then
+        toggleHitboxExpander(false)
+        toggleHitboxExpander(true)
+    end
+end
+
+local function toggleSpeedHack(enabled)
+    speedHackEnabled = enabled
+    humanoid.WalkSpeed = enabled and speedValue or 16
+end
+
+local function updateSpeed(value)
+    speedValue = value
+    if speedHackEnabled then
+        humanoid.WalkSpeed = value
+    end
+end
+
+local function toggleJumpPower(enabled)
+    jumpPowerEnabled = enabled
+    humanoid.JumpPower = enabled and jumpPowerValue or 50
+end
+
+local function updateJumpPower(value)
+    jumpPowerValue = value
+    if jumpPowerEnabled then
+        humanoid.JumpPower = value
+    end
+end
+
+local function toggleGodMode(enabled)
+    godModeEnabled = enabled
+    if enabled then
+        humanoid.MaxHealth = math.huge
+        humanoid.Health = math.huge
+    else
+        humanoid.MaxHealth = 100
+        humanoid.Health = 100
+    end
+end
+
+local function toggleInfJump(enabled)
+    infJumpEnabled = enabled
+    if infJumpConn then infJumpConn:Disconnect() end
+    if enabled then
+        infJumpConn = UserInputService.JumpRequest:Connect(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end)
+    end
+end
+
+local function toggleAutoClick(enabled)
+    autoClickEnabled = enabled
+    if autoClickConn then autoClickConn:Disconnect() end
+    if enabled then
+        autoClickConn = RunService.Heartbeat:Connect(function()
+            VirtualInputManager:SendMouseButtonEvent(mouse.X, mouse.Y, 0, true, game, 0)
+            wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(mouse.X, mouse.Y, 0, false, game, 0)
+        end)
+    end
+end
+
+local function toggleAntiAfk(enabled)
+    antiAfkEnabled = enabled
+    if antiAfkConn then antiAfkConn:Disconnect() end
+    if enabled then
+        antiAfkConn = player.Idled:Connect(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end
+end
+
+local function toggleAimbot(enabled)
+    aimbotEnabled = enabled
+    if aimbotConn then aimbotConn:Disconnect() end
+    if enabled then
+        aimbotConn = RunService.RenderStepped:Connect(function()
+            local closest = nil
+            local minDist = math.huge
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = plr.Character.HumanoidRootPart
+                    local screenPos, visible = camera:WorldToViewportPoint(hrp.Position)
+                    if visible then
+                        local dist = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                        if dist < minDist then
+                            minDist = dist
+                            closest = hrp
+                        end
+                    end
+                end
+            end
+            if closest then
+                camera.CFrame = CFrame.new(camera.CFrame.Position, closest.Position)
+            end
+        end)
+    end
+end
+
+local function toggleFly(enabled)
+    flyEnabled = enabled
+    local root = character:WaitForChild("HumanoidRootPart")
+    if enabled then
+        local bg = Instance.new("BodyGyro")
+        bg.P = 90000
+        bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.CFrame = root.CFrame
+        bg.Parent = root
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Velocity = Vector3.new(0, 0.1, 0)
+        bv.Parent = root
+        humanoid.PlatformStand = true
+        RunService:BindToRenderStep("Fly", Enum.RenderPriority.Input.Value, function()
+            local moveDir = Vector3.new()
+            local camLook = camera.CFrame.LookVector
+            local camRight = camera.CFrame.RightVector
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camLook end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camLook end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camRight end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camRight end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0,1,0) end
+            if moveDir.Magnitude > 0 then
+                bv.Velocity = moveDir.Unit * flySpeed
+                bg.CFrame = CFrame.new(root.Position, root.Position + camLook)
+            else
+                bv.Velocity = Vector3.new(0, 0.1, 0)
+            end
+        end)
+        table.insert(flyConnections, bg)
+        table.insert(flyConnections, bv)
+    else
+        humanoid.PlatformStand = false
+        for _, v in pairs(flyConnections) do
+            v:Destroy()
+        end
+        flyConnections = {}
+        RunService:UnbindFromRenderStep("Fly")
+    end
+end
+
+local function toggleHairSpin(enabled)
+    hairSpinEnabled = enabled
+    if hairSpinConn then hairSpinConn:Disconnect() end
+    if enabled then
+        hairSpinConn = RunService.Heartbeat:Connect(function(delta)
+            for _, acc in pairs(character:GetChildren()) do
+                if acc:IsA("Accessory") and acc:FindFirstChild("Handle") then
+                    local handle = acc.Handle
+                    handle.CFrame = handle.CFrame * CFrame.Angles(0, math.rad(360 * delta), 0)
+                end
+            end
+        end)
+    end
+end
+
+local function toggleXray(enabled)
+    xrayEnabled = enabled
+    for _, part in pairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") and part ~= character and not part:IsDescendantOf(character) then
+            if enabled then
+                if not originalParts[part] then
+                    originalParts[part] = part.Transparency
+                end
+                part.Transparency = 0.8
+            else
+                if originalParts[part] then
+                    part.Transparency = originalParts[part]
+                end
+            end
+        end
+    end
+end
+
+local function toggleTeleportToMouse(enabled)
+    teleportToMouseEnabled = enabled
+    if enabled then
+        local conn = mouse.Button1Down:Connect(function()
+            if mouse.Target then
+                character.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 5, 0))
+            end
+        end)
+        table.insert(flyConnections, conn) -- Reuse for misc
+    end
+end
+
+local function toggleInvisible(enabled)
+    invisibleEnabled = enabled
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Transparency = enabled and 1 or 0
+        end
+    end
+end
+
+local function toggleSuperPunch(enabled)
+    superPunchEnabled = enabled
+    if enabled then
+        local tool = character:FindFirstChildOfClass("Tool")
+        if tool then
+            tool.Activated:Connect(function()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if plr ~= player and plr.Character and (plr.Character.HumanoidRootPart.Position - character.HumanoidRootPart.Position).Magnitude < 10 then
+                        plr.Character.Humanoid:TakeDamage(50)
+                    end
+                end
+            end)
+        end
+    end
+end
+
+local function toggleGravity(enabled)
+    gravityToggleEnabled = enabled
+    workspace.Gravity = enabled and gravityValue or defaultGravity
+end
+
+local function updateGravity(value)
+    gravityValue = value
+    if gravityToggleEnabled then
+        workspace.Gravity = value
+    end
+end
+
+local function toggleTimeOfDay(enabled)
+    timeOfDayToggleEnabled = enabled
+    Lighting.TimeOfDay = enabled and timeOfDayValue or defaultLighting.ClockTime
+end
+
+local function updateTimeOfDay(value)
+    timeOfDayValue = value
+    if timeOfDayToggleEnabled then
+        Lighting.TimeOfDay = value
+    end
+end
+
+local function toggleNoFog(enabled)
+    noFogEnabled = enabled
+    Lighting.FogEnd = enabled and math.huge or defaultLighting.FogEnd
+end
+
+local function toggleAutoFarm(enabled)
+    autoFarmEnabled = enabled
+    if enabled then
+        -- Example auto farm, adapt to game
+        RunService.Heartbeat:Connect(function()
+            -- Farm logic
+        end)
+    end
+end
+
+local function makeDraggable(frame)
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+local premiumUnlocked = false
+local key = math.random(100000, 999999) .. "Azuma" -- Random key
+local toggleIcon = Instance.new("ImageButton")
+toggleIcon.Size = UDim2.new(0, 50, 0, 50)
+toggleIcon.Position = UDim2.new(1, -60, 0, 10)
+toggleIcon.BackgroundTransparency = 1
+toggleIcon.Image = "rbxassetid://4483345998"  -- Valid asset ID
+toggleIcon.Parent = screenGui
+toggleIcon.MouseButton1Click:Connect(function()
+    if mainFrame.Visible then
+        TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+        wait(0.5)
+        mainFrame.Visible = false
+        mainFrame.BackgroundTransparency = 0
+    else
+        mainFrame.Visible = true
+        TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0.25, 0, 0.2, 0)}):Play()
+    end
+end)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(guiScale, 0, guiScale + 0.1, 0)
+mainFrame.Position = UDim2.new(0.25, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+mainFrame.Active = true
+mainFrame.ZIndex = 5
+mainFrame.Visible = true
+mainFrame.BackgroundTransparency = 0
+makeDraggable(mainFrame)
+local mainGradient = Instance.new("UIGradient")
+mainGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 200)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))}
+mainGradient.Rotation = 90
+mainGradient.Parent = mainFrame
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = mainFrame
+local mainShadow = Instance.new("UIStroke")
+mainShadow.Transparency = 0.3
+mainShadow.Color = Color3.fromRGB(150, 150, 150)
+mainShadow.Thickness = 3
+mainShadow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+mainShadow.Parent = mainFrame
+local mainTitle = Instance.new("TextLabel")
+mainTitle.Size = UDim2.new(0.4, 0, 0.08, 0)
+mainTitle.Position = UDim2.new(0, 10, 0, 0)
+mainTitle.BackgroundTransparency = 1
+mainTitle.Text = "Azuma Premium - Experimental V1.00"
+mainTitle.TextColor3 = Color3.fromRGB(0, 0, 0)
+mainTitle.TextSize = 26
+mainTitle.Font = uiFont
+mainTitle.TextScaled = true
+mainTitle.Parent = mainFrame
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0.08, 0, 0.08, 0)
+closeButton.Position = UDim2.new(0.92, 0, 0, 0)
+closeButton.BackgroundTransparency = 1
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+closeButton.TextSize = 24
+closeButton.Font = uiFont
+closeButton.TextScaled = true
+closeButton.Parent = mainFrame
+closeButton.MouseButton1Click:Connect(function()
+    TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+    wait(0.5)
+    mainFrame.Visible = false
+    mainFrame.BackgroundTransparency = 0
+end)
+closeButton.MouseEnter:Connect(function()
+    TweenService:Create(closeButton, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 0, 0), Rotation = 90}):Play()
+end)
+closeButton.MouseLeave:Connect(function()
+    TweenService:Create(closeButton, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(0, 0, 0), Rotation = 0}):Play()
+end)
+local tabFrame = Instance.new("Frame")
+tabFrame.Size = UDim2.new(0.2, 0, 0.92, 0)
+tabFrame.Position = UDim2.new(0, 0, 0.08, 0)
+tabFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+tabFrame.BorderSizePixel = 0
+tabFrame.Parent = mainFrame
+local tabGradient = Instance.new("UIGradient")
+tabGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 200)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))}
+tabGradient.Rotation = 90
+tabGradient.Parent = tabFrame
+local tabCorner = Instance.new("UICorner")
+tabCorner.CornerRadius = UDim.new(0, 12)
+tabCorner.Parent = tabFrame
+local tabList = Instance.new("UIListLayout")
+tabList.FillDirection = Enum.FillDirection.Vertical
+tabList.SortOrder = Enum.SortOrder.LayoutOrder
+tabList.Padding = UDim.new(0, 5)
+tabList.Parent = tabFrame
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(0.8, 0, 0.92, 0)
+contentContainer.Position = UDim2.new(0.2, 0, 0.08, 0)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = mainFrame
+local tabs = {"Home", "Target", "Player Mods", "Universal Scripts", "Toggles", "Quick TP", "Aimbot/ESP", "Customize GUI", "Misc"}
+local contentFrames = {}
+for i, tabName in ipairs(tabs) do
+    local tabButton = Instance.new("TextButton")
+    tabButton.Size = UDim2.new(1, 0, 0, 40)
+    tabButton.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    tabButton.Text = tabName
+    tabButton.TextColor3 = Color3.fromRGB(100, 100, 100)
+    tabButton.TextSize = 18
+    tabButton.Font = uiFont
+    tabButton.TextScaled = true
+    tabButton.Parent = tabFrame
+    local tabButtonCorner = Instance.new("UICorner")
+    tabButtonCorner.CornerRadius = UDim.new(0, 8)
+    tabButtonCorner.Parent = tabButton
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Size = UDim2.new(1, 0, 1, 0)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.ScrollBarThickness = 4
+    contentFrame.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200)
+    contentFrame.Visible = i == 1
+    contentFrame.Parent = contentContainer
+    local contentGrid = Instance.new("UIGridLayout")
+    contentGrid.CellPadding = UDim2.new(0, 10, 0, 10)
+    contentGrid.CellSize = UDim2.new(0.24, 0, 0, 40)
+    contentGrid.SortOrder = Enum.SortOrder.LayoutOrder
+    contentGrid.Parent = contentFrame
+    local contentPadding = Instance.new("UIPadding")
+    contentPadding.PaddingTop = UDim.new(0, 10)
+    contentPadding.PaddingLeft = UDim.new(0, 10)
+    contentPadding.PaddingRight = UDim.new(0, 10)
+    contentPadding.PaddingBottom = UDim.new(0, 10)
+    contentPadding.Parent = contentFrame
+    table.insert(contentFrames, contentFrame)
+    tabButton.MouseButton1Click:Connect(function()
+        for _, cf in pairs(contentFrames) do
+            cf.Visible = false
+            TweenService:Create(cf, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        end
+        contentFrame.Visible = true
+        TweenService:Create(contentFrame, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+        for _, btn in ipairs(tabFrame:GetChildren()) do
+            if btn:IsA("TextButton") then
+                btn.TextColor3 = Color3.fromRGB(100, 100, 100)
+                btn.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+            end
+        end
+        tabButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+        tabButton.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+    end)
+    tabButton.MouseEnter:Connect(function()
+        if tabButton.TextColor3 ~= Color3.fromRGB(0, 0, 0) then
+            TweenService:Create(tabButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(230, 230, 230)}):Play()
+        end
+    end)
+    tabButton.MouseLeave:Connect(function()
+        if tabButton.TextColor3 ~= Color3.fromRGB(0, 0, 0) then
+            TweenService:Create(tabButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(240, 240, 240)}):Play()
+        end
+    end)
+end
+local function createSection(parent, titleText)
+    local sectionFrame = Instance.new("Frame")
+    sectionFrame.Size = UDim2.new(1, 0, 0, 30)
+    sectionFrame.BackgroundTransparency = 1
+    sectionFrame.Parent = parent
+    local sectionTitle = Instance.new("TextLabel")
+    sectionTitle.Size = UDim2.new(1, 0, 1, 0)
+    sectionTitle.BackgroundTransparency = 1
+    sectionTitle.Text = titleText
+    sectionTitle.TextColor3 = Color3.fromRGB(0, 0, 255)
+    sectionTitle.TextSize = 18
+    sectionTitle.Font = uiFont
+    sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    sectionTitle.TextScaled = true
+    sectionTitle.Parent = sectionFrame
+    return sectionFrame
+end
+local function createToggle(parent, labelText, callback)
+    local toggleFrame = Instance.new("Frame")
+    toggleFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    toggleFrame.Parent = parent
+    local toggleGradient = Instance.new("UIGradient")
+    toggleGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(250, 250, 250)), ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 230, 230))}
+    toggleGradient.Parent = toggleFrame
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 8)
+    toggleCorner.Parent = toggleFrame
+    local toggleLabel = Instance.new("TextLabel")
+    toggleLabel.Size = UDim2.new(1, 0, 1, 0)
+    toggleLabel.BackgroundTransparency = 1
+    toggleLabel.Text = labelText
+    toggleLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+    toggleLabel.TextSize = 16
+    toggleLabel.Font = uiFont
+    toggleLabel.TextScaled = true
+    toggleLabel.TextTruncate = Enum.TextTruncate.SplitWord
+    toggleLabel.Parent = toggleFrame
+    local isOn = false
+    toggleFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isOn = not isOn
+            local color = isOn and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+            TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundColor3 = color}):Play()
+            local particle = Instance.new("ParticleEmitter")
+            particle.Texture = particleTexture
+            particle.Lifetime = particleLifetime
+            particle.Rate = particleRate
+            particle.Speed = NumberRange.new(5, 10)
+            particle.Size = NumberSequence.new(0.5)
+            particle.Parent = toggleFrame
+            particle.Enabled = true
+            Debris:AddItem(particle, particleLifetime.Max)
+            callback(isOn)
+        end
+    end)
+    toggleFrame.MouseEnter:Connect(function()
+        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 220, 220)}):Play()
+    end)
+    toggleFrame.MouseLeave:Connect(function()
+        local color = isOn and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundColor3 = color}):Play()
+    end)
+    return toggleFrame
+end
+local function createButton(parent, labelText, callback)
+    local buttonFrame = Instance.new("Frame")
+    buttonFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    buttonFrame.Parent = parent
+    local buttonGradient = Instance.new("UIGradient")
+    buttonGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(250, 250, 250)), ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 230, 230))}
+    buttonGradient.Parent = buttonFrame
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.Parent = buttonFrame
+    local buttonLabel = Instance.new("TextButton")
+    buttonLabel.Size = UDim2.new(1, 0, 1, 0)
+    buttonLabel.BackgroundTransparency = 1
+    buttonLabel.Text = labelText
+    buttonLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+    buttonLabel.TextSize = 16
+    buttonLabel.Font = uiFont
+    buttonLabel.TextScaled = true
+    buttonLabel.TextTruncate = Enum.TextTruncate.SplitWord
+    buttonLabel.Parent = buttonFrame
+    buttonLabel.MouseButton1Click:Connect(function()
+        TweenService:Create(buttonFrame, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(220, 220, 220)}):Play()
+        wait(0.1)
+        TweenService:Create(buttonFrame, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(240, 240, 240)}):Play()
+        callback()
+    end)
+    buttonFrame.MouseEnter:Connect(function()
+        TweenService:Create(buttonFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(230, 230, 230)}):Play()
+    end)
+    buttonFrame.MouseLeave:Connect(function()
+        TweenService:Create(buttonFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(240, 240, 240)}):Play()
+    end)
+    return buttonFrame
+end
+local function createSlider(parent, labelText, min, max, default, callback)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    sliderFrame.Parent = parent
+    local sliderGradient = Instance.new("UIGradient")
+    sliderGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(250, 250, 250)), ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 230, 230))}
+    sliderGradient.Parent = sliderFrame
+    local sliderCorner = Instance.new("UICorner")
+    sliderCorner.CornerRadius = UDim.new(0, 8)
+    sliderCorner.Parent = sliderFrame
+    local sliderLabel = Instance.new("TextLabel")
+    sliderLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    sliderLabel.BackgroundTransparency = 1
+    sliderLabel.Text = labelText
+    sliderLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+    sliderLabel.TextSize = 16
+    sliderLabel.Font = uiFont
+    sliderLabel.TextScaled = true
+    sliderLabel.Parent = sliderFrame
+    local sliderBar = Instance.new("Frame")
+    sliderBar.Size = UDim2.new(1, 0, 0.2, 0)
+    sliderBar.Position = UDim2.new(0, 0, 0.6, 0)
+    sliderBar.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    sliderBar.Parent = sliderFrame
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(1, 0)
+    barCorner.Parent = sliderBar
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    sliderFill.Parent = sliderBar
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    fillCorner.Parent = sliderFill
+    local sliderValue = Instance.new("TextLabel")
+    sliderValue.Size = UDim2.new(1, 0, 0.3, 0)
+    sliderValue.Position = UDim2.new(0, 0, 0.8, 0)
+    sliderValue.BackgroundTransparency = 1
+    sliderValue.Text = tostring(default)
+    sliderValue.TextColor3 = Color3.fromRGB(0, 0, 0)
+    sliderValue.TextSize = 14
+    sliderValue.TextScaled = true
+    sliderValue.Parent = sliderFrame
+    local value = default
+    local dragging = false
+    local function updateSlider(input)
+        local relativeX = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+        value = min + relativeX * (max - min)
+        sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+        sliderValue.Text = tostring(math.floor(value))
+        callback(value)
+    end
+    sliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            updateSlider(input)
+        end
+    end)
+    sliderBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateSlider(input)
+        end
+    end)
+    callback(default)
+    return sliderFrame
+end
+local function createInput(parent, labelText, placeholder, callback)
+    local inputFrame = Instance.new("Frame")
+    inputFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    inputFrame.Parent = parent
+    local inputGradient = Instance.new("UIGradient")
+    inputGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(250, 250, 250)), ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 230, 230))}
+    inputGradient.Parent = inputFrame
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputFrame
+    local inputLabel = Instance.new("TextLabel")
+    inputLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    inputLabel.BackgroundTransparency = 1
+    inputLabel.Text = labelText
+    inputLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+    inputLabel.TextSize = 16
+    inputLabel.Font = uiFont
+    inputLabel.TextScaled = true
+    inputLabel.Parent = inputFrame
+    local inputBox = Instance.new("TextBox")
+    inputBox.Size = UDim2.new(1, 0, 0.6, 0)
+    inputBox.Position = UDim2.new(0, 0, 0.4, 0)
+    inputBox.BackgroundTransparency = 1
+    inputBox.Text = ""
+    inputBox.PlaceholderText = placeholder
+    inputBox.TextColor3 = Color3.fromRGB(100, 100, 100)
+    inputBox.TextSize = 14
+    inputBox.TextScaled = true
+    inputBox.Parent = inputFrame
+    inputBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            callback(inputBox.Text)
+        end
+    end)
+    return inputFrame
+end
+local homeTab = contentFrames[1]
+local welcomeLabel = Instance.new("TextLabel")
+welcomeLabel.Size = UDim2.new(1, 0, 0, 50)
+welcomeLabel.BackgroundTransparency = 1
+welcomeLabel.Text = "Welcome, " .. player.Name
+welcomeLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+welcomeLabel.TextSize = 24
+welcomeLabel.Font = uiFont
+welcomeLabel.TextScaled = true
+welcomeLabel.Parent = homeTab
+createSection(homeTab, "Premium")
+local getKeyButton = createButton(homeTab, "Get Key", function()
+    StarterGui:SetCore("SendNotification", {
+        Title = "Azuma Premium Key",
+        Text = "Key is: " .. key,
+        Duration = 5
+    })
+end)
+local keyInput = createInput(homeTab, "Enter Key", "Key", function(enteredKey)
+    if enteredKey == key then
+        premiumUnlocked = true
+        StarterGui:SetCore("SendNotification", {
+            Title = "Success",
+            Text = "Premium Unlocked!",
+            Duration = 5
+        })
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "Error",
+            Text = "Invalid Key",
+            Duration = 5
+        })
+    end
+end)
+local generateKeyButton = createButton(homeTab, "Generate New Key", function()
+    key = math.random(100000, 999999) .. "Azuma"
+    StarterGui:SetCore("SendNotification", {
+        Title = "New Key Generated",
+        Text = "New key: " .. key,
+        Duration = 5
+    })
+end)
+local targetTab = contentFrames[2]
+createSection(targetTab, "Target")
+local setTargetInput = createInput(targetTab, "Set Target", "Username", function(username)
+    targetPlayer = Players:FindFirstChild(username)
+    if targetPlayer then
+        StarterGui:SetCore("SendNotification", {
+            Title = "Target Set",
+            Text = "Target: " .. username,
+            Duration = 5
+        })
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "Error",
+            Text = "User not found",
+            Duration = 5
+        })
+    end
+end)
+local playerModsTab = contentFrames[3]
+createSection(playerModsTab, "Player Mods")
+createToggle(playerModsTab, "Headless", toggleHeadless)
+createToggle(playerModsTab, "Korblox", toggleKorblox)
+createToggle(playerModsTab, "Speed Hack", toggleSpeedHack)
+createSlider(playerModsTab, "Speed", 16, 200, 50, updateSpeed)
+createToggle(playerModsTab, "Jump Power", toggleJumpPower)
+createSlider(playerModsTab, "Jump Power", 50, 500, 100, updateJumpPower)
+local universalScriptsTab = contentFrames[4]
+createSection(universalScriptsTab, "Universal Scripts")
+createToggle(universalScriptsTab, "Hair Spin", toggleHairSpin)
+createToggle(universalScriptsTab, "Xray", toggleXray)
+createToggle(universalScriptsTab, "Teleport to Mouse", toggleTeleportToMouse)
+createToggle(universalScriptsTab, "Invisible", toggleInvisible)
+createToggle(universalScriptsTab, "Super Punch", toggleSuperPunch)
+createToggle(universalScriptsTab, "Gravity Toggle", toggleGravity)
+createSlider(universalScriptsTab, "Gravity", 0, 196.2, 196.2, updateGravity)
+createToggle(universalScriptsTab, "Time of Day", toggleTimeOfDay)
+createSlider(universalScriptsTab, "Time", 0, 24, 12, updateTimeOfDay)
+createToggle(universalScriptsTab, "No Fog", toggleNoFog)
+createToggle(universalScriptsTab, "Auto Farm", toggleAutoFarm)
+createToggle(universalScriptsTab, "Inf Jump", toggleInfJump)
+createToggle(universalScriptsTab, "Fly", toggleFly)
+createToggle(universalScriptsTab, "God Mode", toggleGodMode)
+createToggle(universalScriptsTab, "Auto Click", toggleAutoClick)
+createToggle(universalScriptsTab, "Anti AFK", toggleAntiAfk)
+createToggle(universalScriptsTab, "Fullbright", toggleFullbright)
+createToggle(universalScriptsTab, "NoClip", toggleNoclip)
+createToggle(universalScriptsTab, "Infinite Yield", function(enabled)
+    -- Implement infinite yield admin commands if needed
+end)
+createToggle(universalScriptsTab, "Anti Kick", function(enabled)
+    -- Implement anti kick if needed
+end)
+createToggle(universalScriptsTab, "Anti Ban", function(enabled)
+    -- Implement anti ban if needed
+end)
+createToggle(universalScriptsTab, "Server Hopper", function(enabled)
+    -- Implement server hopper if needed
+end)
+createToggle(universalScriptsTab, "Rejoin Game", function(enabled)
+    if enabled then
+        game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+    end
+end)
+createToggle(universalScriptsTab, "Lag Switch", function(enabled)
+    -- Implement lag switch if needed
+end)
+createToggle(universalScriptsTab, "Chat Spam", function(enabled)
+    -- Implement chat spam if needed
+end)
+createToggle(universalScriptsTab, "Vehicle Fly", function(enabled)
+    -- Implement vehicle fly if needed
+end)
+createToggle(universalScriptsTab, "Wall Walk", function(enabled)
+    -- Implement wall walk if needed
+end)
+createToggle(universalScriptsTab, "Teleport GUI", function(enabled)
+    -- Implement teleport GUI if needed
+end)
+createToggle(universalScriptsTab, "Player Teleport", function(enabled)
+    -- Implement player teleport if needed
+end)
+createToggle(universalScriptsTab, "Item Dupe", function(enabled)
+    -- Implement item dupe if needed
+end)
+createToggle(universalScriptsTab, "Speed Boost", function(enabled)
+    -- Implement speed boost if needed
+end)
+createToggle(universalScriptsTab, "Jump Boost", function(enabled)
+    -- Implement jump boost if needed
+end)
+createToggle(universalScriptsTab, "Invisible Walls", function(enabled)
+    -- Implement invisible walls if needed
+end)
+local togglesTab = contentFrames[5]
+createSection(togglesTab, "Toggles")
+createToggle(togglesTab, "No Recoil", function(enabled)
+    -- Implement no recoil if needed
+end)
+createToggle(togglesTab, "Money ESP", function(enabled)
+    -- Implement money ESP if needed
+end)
+createToggle(togglesTab, "High Tool", function(enabled)
+    -- Implement high tool if needed
+end)
+createToggle(togglesTab, "Reset Char", function(enabled)
+    if enabled then
+        humanoid.Health = 0
+    end
+end)
+createToggle(togglesTab, "Animations", function(enabled)
+    -- Implement animations if needed
+end)
+createToggle(togglesTab, "Gamepass", function(enabled)
+    -- Implement gamepass unlock if needed
+end)
+local quickTPTab = contentFrames[6]
+createSection(quickTPTab, "Quick TP")
+createButton(quickTPTab, "Teleport to Target", function()
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        character.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "Error",
+            Text = "No target set or invalid",
+            Duration = 5
+        })
+    end
+end)
+local aimbotESPTab = contentFrames[7]
+createSection(aimbotESPTab, "Aimbot / ESP")
+createToggle(aimbotESPTab, "Body Highlight ESP", toggleEsp)
+createToggle(aimbotESPTab, "Aimbot (HRP Lock)", toggleAimbot)
+createToggle(aimbotESPTab, "Hitbox Expander", toggleHitboxExpander)
+createSlider(aimbotESPTab, "Hitbox Size", 1, 20, 5, updateHitboxSize)
+local customizeGUITab = contentFrames[8]
+createSection(customizeGUITab, "Customize GUI")
+local guiScaleSlider = createSlider(customizeGUITab, "GUI Scale", 0.3, 0.8, guiScale, function(value)
+    guiScale = value
+    mainFrame.Size = UDim2.new(value, 0, value + 0.1, 0)
+end)
+local fontDropdown = createButton(customizeGUITab, "Cycle Font", function()
+    local fonts = {Enum.Font.SourceSans, Enum.Font.Arial, Enum.Font.Gotham, Enum.Font.Legacy, Enum.Font.Fantasy}
+    local currentIndex = table.find(fonts, uiFont) or 1
+    uiFont = fonts[(currentIndex % #fonts) + 1]
+    for _, desc in pairs(screenGui:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            desc.Font = uiFont
+        end
+    end
+end)
+local colorSchemeButton = createButton(customizeGUITab, "Cycle Color Scheme", function()
+    local schemes = {"GreyWhite", "Dark", "Blue", "Green", "Red"}
+    local currentIndex = table.find(schemes, colorScheme) or 1
+    colorScheme = schemes[(currentIndex % #schemes) + 1]
+    applyColorScheme()
+end)
+local particleTextureInput = createInput(customizeGUITab, "Particle Texture ID", "ID", function(id)
+    particleTexture = "rbxassetid://" .. id
+end)
+local particleRateSlider = createSlider(customizeGUITab, "Particle Rate", 10, 100, 20, function(value)
+    particleRate = value
+end)
+local particleLifetimeSlider = createSlider(customizeGUITab, "Particle Lifetime", 1, 10, 5, function(value)
+    particleLifetime = NumberRange.new(value, value)
+end)
+local miscTab = contentFrames[9]
+createSection(miscTab, "Misc")
+-- Add misc features
+local function createParticle(parent)
+    local particle = Instance.new("ParticleEmitter")
+    particle.Texture = particleTexture
+    particle.Lifetime = particleLifetime
+    particle.Rate = particleRate
+    particle.Speed = NumberRange.new(5, 10)
+    particle.Rotation = NumberRange.new(0, 360)
+    particle.Size = NumberSequence.new(0.5)
+    particle.Color = ColorSequence.new(Color3.fromRGB(0, 0, 0))
+    particle.Parent = parent
+    particle.Enabled = true
+end
+createParticle(mainFrame)
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoid = newChar:WaitForChild("Humanoid")
+    if flyEnabled then
+        toggleFly(false)
+        toggleFly(true)
+    end
+    if noclipEnabled then toggleNoclip(true) end
+    if espEnabled then toggleEsp(true) end
+    if godModeEnabled then toggleGodMode(true) end
+    if infJumpEnabled then toggleInfJump(true) end
+    if autoClickEnabled then toggleAutoClick(true) end
+    if antiAfkEnabled then toggleAntiAfk(true) end
+    if fullbrightEnabled then toggleFullbright(true) end
+    if aimbotEnabled then toggleAimbot(true) end
+    if headlessEnabled then toggleHeadless(true) end
+    if korbloxEnabled then toggleKorblox(true) end
+    if hitboxExpanderEnabled then toggleHitboxExpander(true) end
+    if speedHackEnabled then toggleSpeedHack(true) end
+    if jumpPowerEnabled then toggleJumpPower(true) end
+    if hairSpinEnabled then toggleHairSpin(true) end
+    if xrayEnabled then toggleXray(true) end
+    if teleportToMouseEnabled then toggleTeleportToMouse(true) end
+    if invisibleEnabled then toggleInvisible(true) end
+    if superPunchEnabled then toggleSuperPunch(true) end
+    if gravityToggleEnabled then toggleGravity(true) end
+    if timeOfDayToggleEnabled then toggleTimeOfDay(true) end
+    if noFogEnabled then toggleNoFog(true) end
+    if autoFarmEnabled then toggleAutoFarm(true) end
+end)
+for _, plr in pairs(Players:GetPlayers()) do
+    plr.CharacterAdded:Connect(function(char)
+        if espEnabled then
+            local hl = Instance.new("Highlight")
+            hl.Parent = char
+            hl.FillColor = espColor
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.FillTransparency = 0.5
+            hl.OutlineTransparency = 0
+            highlights[plr] = hl
+        end
+        if hitboxExpanderEnabled and plr ~= player then
+            local head = char:WaitForChild("Head")
+            if not originalHeads[plr] then
+                originalHeads[plr] = {
+                    size = head.Size,
+                    transparency = head.Transparency
+                }
+            end
+            head.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+            head.Transparency = 0.7
+        end
+    end)
+end
+applyColorScheme()
